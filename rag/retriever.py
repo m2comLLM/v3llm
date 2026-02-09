@@ -3,16 +3,26 @@ import re
 from .config import SPECIALTIES, TOP_K
 from .indexer import get_collection
 
+# 첨부 문서 참조를 암시하는 키워드
+_ATTACHMENT_HINTS = ("점수", "기준", "별지", "별첨", "첨부", "연수교육", "학술대회 목록")
+
 
 def extract_query_filters(question: str) -> dict | None:
     """질문에서 전공명/연차를 감지하여 ChromaDB where 필터 생성"""
     filters = []
+    needs_attachment = any(kw in question for kw in _ATTACHMENT_HINTS)
 
     # 전공명 감지 (긴 이름부터 매칭하여 '외과' < '성형외과' 문제 방지)
     for spec in sorted(SPECIALTIES, key=len, reverse=True):
         if spec in question:
             filters.append({"specialty": spec})
             break
+
+    # 첨부 문서가 필요한 경우: 구분/연차 필터 없이 전공 필터만 적용
+    if needs_attachment:
+        if not filters:
+            return {"doc_type": "첨부"}
+        return {"$and": filters + [{"doc_type": "첨부"}]}
 
     # 연차 감지
     m = re.search(r"(\d)\s*년\s*차", question)

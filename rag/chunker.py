@@ -206,27 +206,31 @@ def generate_all_chunks() -> list[dict]:
         if os.path.exists(table_path):
             chunks.extend(chunk_curriculum_table(table_path, specialty, spec_id))
 
-        # 첨부 테이블
-        for fname in sorted(os.listdir(main_dir)):
-            if re.match(r"table_\d+\.md", fname):
-                fpath = os.path.join(main_dir, fname)
-                text = _read_md(fpath)
-                body = re.sub(r"^#.*\n+", "", text).strip()
-                if body:
-                    chunks.append(
-                        {
-                            "id": f"{specialty}_첨부_{fname}",
-                            "text": f"[{specialty}] 첨부자료:\n{body}",
-                            "metadata": {
-                                "doc_type": "첨부",
-                                "specialty": specialty,
-                                "specialty_id": spec_id,
-                                "year": "",
-                                "category": "",
-                                "chunk_level": "document",
-                                "source_file": os.path.relpath(fpath, OUTPUT_DIR),
-                            },
-                        }
-                    )
+        # 첨부 파일 (attachment/ 또는 attachments/ 폴더)
+        spec_dir = os.path.join(ch3_dir, folder)
+        for sub in os.listdir(spec_dir):
+            sub_path = os.path.join(spec_dir, sub)
+            if os.path.isdir(sub_path) and sub.startswith("attachment"):
+                for fname in sorted(os.listdir(sub_path)):
+                    if fname.endswith(".md"):
+                        fpath = os.path.join(sub_path, fname)
+                        text = _read_md(fpath)
+                        body = re.sub(r"^#.*\n+", "", text).strip()
+                        if body:
+                            chunks.append(
+                                {
+                                    "id": f"{specialty}_첨부_{fname}",
+                                    "text": f"[{specialty}] 첨부자료 - {fname.replace('.md', '')}:\n{body}",
+                                    "metadata": {
+                                        "doc_type": "첨부",
+                                        "specialty": specialty,
+                                        "specialty_id": spec_id,
+                                        "year": "",
+                                        "category": "",
+                                        "chunk_level": "document",
+                                        "source_file": os.path.relpath(fpath, OUTPUT_DIR),
+                                    },
+                                }
+                            )
 
     return chunks
