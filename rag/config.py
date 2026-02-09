@@ -6,7 +6,7 @@ CHROMA_PERSIST_DIR = os.path.join(BASE_DIR, "chroma_db")
 
 OLLAMA_BASE_URL = "http://localhost:11434"
 EMBEDDING_MODEL = "nomic-embed-text"
-LLM_MODEL = "qwen2.5:7b"
+LLM_MODEL = "exaone3.5:7.8b"
 
 CHROMA_COLLECTION = "residency_curriculum"
 TOP_K = 5
