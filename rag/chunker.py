@@ -23,6 +23,22 @@ def parse_md_table(text: str) -> pd.DataFrame | None:
     return pd.DataFrame(rows, columns=header)
 
 
+def _ffill_md_table(body: str) -> str:
+    """마크다운 테이블의 빈 셀을 forward fill하여 반환 (테이블 없으면 원본 반환)"""
+    df = parse_md_table(body)
+    if df is None:
+        return body
+    if not (df == "").any().any():
+        return body
+    df = df.replace("", pd.NA).ffill().fillna("")
+    header = "| " + " | ".join(df.columns) + " |"
+    sep = "| " + " | ".join("---" for _ in df.columns) + " |"
+    rows = []
+    for _, row in df.iterrows():
+        rows.append("| " + " | ".join(str(v) for v in row) + " |")
+    return "\n".join([header, sep] + rows)
+
+
 def _read_md(path: str) -> str:
     with open(path, encoding="utf-8") as f:
         return f.read()
@@ -216,6 +232,8 @@ def generate_all_chunks() -> list[dict]:
                         fpath = os.path.join(sub_path, fname)
                         text = _read_md(fpath)
                         body = re.sub(r"^#.*\n+", "", text).strip()
+                        if "지부 집담회" in fname:
+                            body = _ffill_md_table(body)
                         if body:
                             chunks.append(
                                 {
