@@ -8,8 +8,8 @@ def extract_query_filters(question: str) -> dict | None:
     """질문에서 전공명/연차를 감지하여 ChromaDB where 필터 생성"""
     filters = []
 
-    # 전공명 감지
-    for spec in SPECIALTIES:
+    # 전공명 감지 (긴 이름부터 매칭하여 '외과' < '성형외과' 문제 방지)
+    for spec in sorted(SPECIALTIES, key=len, reverse=True):
         if spec in question:
             filters.append({"specialty": spec})
             break
