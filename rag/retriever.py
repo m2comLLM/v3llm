@@ -1,6 +1,6 @@
 import re
 
-from .config import SPECIALTIES, TOP_K
+from .config import SPECIALTIES, SPECIALTY_ALIASES, TOP_K
 from .indexer import get_collection
 
 # 첨부 문서 참조를 암시하는 키워드
@@ -17,6 +17,16 @@ def extract_query_filters(question: str) -> dict | None:
         if spec in question:
             filters.append({"specialty": spec})
             break
+
+    # 유사어 매칭 (정확한 전공명 매칭 실패 시)
+    if not any("specialty" in f for f in filters):
+        for spec, aliases in SPECIALTY_ALIASES.items():
+            for alias in sorted(aliases, key=len, reverse=True):
+                if alias in question:
+                    filters.append({"specialty": spec})
+                    break
+            if any("specialty" in f for f in filters):
+                break
 
     # 첨부 문서가 필요한 경우: 구분/연차 필터 없이 전공 필터만 적용
     if needs_attachment:

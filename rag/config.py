@@ -11,6 +11,12 @@ LLM_MODEL = "exaone3.5:7.8b"
 CHROMA_COLLECTION = "residency_curriculum"
 TOP_K = 5
 
+# 전공 유사어 매핑 (정확한 전공명 매칭 실패 시 사용)
+SPECIALTY_ALIASES = {
+    "병리과": ["병리학회", "병리학", "병리"],
+    "이비인후과": ["이비인후과학회", "대한이비인후과학회", "이비인후"],
+}
+
 SYSTEM_PROMPT = """당신은 전공의 수련 교과과정 전문 도우미입니다.
 
 [핵심 규칙]
