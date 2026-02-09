@@ -220,7 +220,7 @@ def generate_all_chunks() -> list[dict]:
                             chunks.append(
                                 {
                                     "id": f"{specialty}_첨부_{fname}",
-                                    "text": f"[{specialty}] 첨부자료 - {fname.replace('.md', '')}:\n{body}",
+                                    "text": f"[{specialty}] 별지(첨부자료) - {fname.replace('.md', '')}:\n{body}",
                                     "metadata": {
                                         "doc_type": "첨부",
                                         "specialty": specialty,
