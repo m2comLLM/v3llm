@@ -68,10 +68,8 @@ def extract_query_filters(question: str) -> dict | None:
     return {"$and": filters}
 
 
-def retrieve(question: str, top_k: int = TOP_K) -> list[dict]:
-    col = get_collection()
-    where_filter = extract_query_filters(question)
-
+def _query(col, question: str, top_k: int, where_filter: dict | None) -> list[dict]:
+    """공통 ChromaDB 쿼리 로직"""
     query_params = {
         "query_texts": [question],
         "n_results": top_k,
@@ -82,7 +80,6 @@ def retrieve(question: str, top_k: int = TOP_K) -> list[dict]:
     try:
         results = col.query(**query_params)
     except Exception:
-        # 필터가 결과 없으면 필터 없이 재시도
         results = col.query(query_texts=[question], n_results=top_k)
 
     items = []
@@ -95,6 +92,49 @@ def retrieve(question: str, top_k: int = TOP_K) -> list[dict]:
                     "distance": results["distances"][0][i] if results["distances"] else 0,
                 }
             )
+    return items
+
+
+def _is_attachment_filter(where_filter: dict) -> bool:
+    """이미 첨부 필터가 적용된 쿼리인지 확인"""
+    if where_filter.get("doc_type") == "첨부":
+        return True
+    for cond in where_filter.get("$and", []):
+        if cond.get("doc_type") == "첨부":
+            return True
+    return False
+
+
+def _extract_specialty_filter(where_filter: dict) -> dict | None:
+    """where 필터에서 전공 조건만 추출"""
+    if "specialty" in where_filter:
+        return {"specialty": where_filter["specialty"]}
+    for cond in where_filter.get("$and", []):
+        if "specialty" in cond:
+            return cond
+    return None
+
+
+def retrieve(question: str, top_k: int = TOP_K) -> list[dict]:
+    col = get_collection()
+    where_filter = extract_query_filters(question)
+
+    # 1차 검색
+    items = _query(col, question, top_k, where_filter)
+
+    # 2단계: 1차 결과에 첨부 문서가 없고, 첨부 필터가 아닌 경우 첨부 보완 검색
+    has_attachment = any(r["metadata"].get("doc_type") == "첨부" for r in items)
+    if not has_attachment and where_filter and not _is_attachment_filter(where_filter):
+        spec_filter = _extract_specialty_filter(where_filter)
+        if spec_filter:
+            att_filter = {"$and": [spec_filter, {"doc_type": "첨부"}]}
+        else:
+            att_filter = {"doc_type": "첨부"}
+        att_items = _query(col, question, 2, att_filter)
+        for item in att_items:
+            if item["distance"] < 1.5:
+                items.append(item)
+
     return items
 
 
