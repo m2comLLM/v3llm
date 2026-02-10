@@ -1,0 +1,6 @@
+streamlit
+pandas
+pdfplumber
+chromadb
+requests
+ollama
