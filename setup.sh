@@ -82,8 +82,8 @@ fi
 echo "      임베딩 모델 다운로드: nomic-embed-text"
 ollama pull nomic-embed-text
 
-echo "      LLM 모델 다운로드: exaone3.5:7.8b"
-ollama pull exaone3.5:7.8b
+echo "      LLM 모델 다운로드: exaone3.5:32b"
+ollama pull exaone3.5:32b
 
 # ----------------------------------------------------------
 # 완료
