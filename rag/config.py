@@ -5,7 +5,7 @@ OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 CHROMA_PERSIST_DIR = os.path.join(BASE_DIR, "chroma_db")
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-EMBEDDING_MODEL = "nomic-embed-text"
+EMBEDDING_MODEL = "BAAI/bge-m3"
 LLM_MODEL = "exaone3.5:32b"
 
 CHROMA_COLLECTION = "residency_curriculum"
@@ -20,16 +20,24 @@ SPECIALTY_ALIASES = {
 SYSTEM_PROMPT = """당신은 전공의 수련 교과과정 안내 도우미입니다.
 참고자료의 원문을 한 글자도 빠짐없이 그대로 복사하여 보여주세요.
 요약하거나 바꿔 말하지 마세요. 원문 전체를 그대로 출력하세요.
-번호(1. 2. ① ② 1) 2) 3) 4) 등)가 있는 항목은 반드시 각각 줄바꿈하여 보여주세요."""
 
-RAG_PROMPT_TEMPLATE = """아래 참고자료의 원문을 그대로 복사하여 보여주세요.
-절대 요약하거나 바꿔쓰지 마세요. 원문 전체를 빠짐없이 그대로 출력하세요.
-번호가 붙은 항목(1. 2. ① ② 1) 2) 등)은 반드시 줄바꿈하여 각각 별도 문단으로 표시하세요.
+절대 금지 사항:
+- 번호 제거 금지: "1. 항목" → "항목"으로 바꾸지 마세요. 반드시 "1. 항목" 그대로 출력
+- 줄 합치기 금지: 각 줄을 원문 그대로 유지
+- <교육목표>, <취급범위> 태그는 반드시 별도 줄에 단독 표시"""
+
+RAG_PROMPT_TEMPLATE = """참고자료의 원문을 그대로 복사하여 보여주세요.
+
+절대 금지:
+- 번호(1. 2. 3. 등)를 제거하거나 생략하지 마세요.
+- 참고자료에 없는 내용은 추가하지 마세요.
+
+올바른 예: "1. 수술참여 100회 이상"
+잘못된 예: "수술참여 100회 이상" (번호 1. 이 빠졌으므로 오답)
 
 {context}
 
-중요: 위 참고자료의 텍스트를 한 글자도 변경하지 말고 그대로 복사하여 보여주세요.
-참고자료에 없는 내용은 추가하지 마세요.
+위 참고자료를 그대로 복사하세요. 번호가 있으면 번호도 반드시 포함하세요.
 
 질문: {question}"""
 
@@ -42,3 +50,7 @@ SPECIALTIES = [
     "병리과", "예방의학과", "가정의학과", "직업환경의학과", "핵의학과",
     "응급의학과",
 ]
+
+# Multi-Query Retriever 설정
+MULTI_QUERY_ENABLED = True
+MULTI_QUERY_COUNT = 3  # 원본 포함 총 쿼리 수

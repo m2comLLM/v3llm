@@ -4,3 +4,4 @@ pdfplumber
 chromadb
 requests
 ollama
+sentence-transformers

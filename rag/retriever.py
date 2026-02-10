@@ -1,6 +1,13 @@
 import re
+from concurrent.futures import ThreadPoolExecutor
 
-from .config import SPECIALTIES, SPECIALTY_ALIASES, TOP_K
+from .config import (
+    MULTI_QUERY_COUNT,
+    MULTI_QUERY_ENABLED,
+    SPECIALTIES,
+    SPECIALTY_ALIASES,
+    TOP_K,
+)
 from .indexer import get_collection
 
 # 첨부 문서 참조를 암시하는 키워드
@@ -97,12 +104,113 @@ def _query(col, question: str, top_k: int, where_filter: dict | None) -> list[di
         for i, doc in enumerate(results["documents"][0]):
             items.append(
                 {
+                    "id": results["ids"][0][i] if results["ids"] else "",
                     "text": doc,
                     "metadata": results["metadatas"][0][i] if results["metadatas"] else {},
                     "distance": results["distances"][0][i] if results["distances"] else 0,
                 }
             )
     return items
+
+
+# Multi-Query: 도메인 특화 유의어 사전
+_QUERY_SYNONYMS = {
+    "교과내용": ["교육과정", "수련내용"],
+    "교육과정": ["교과내용", "수련내용"],
+    "수련내용": ["교과내용", "교육과정"],
+    "환자취급범위": ["진료범위", "환자진료범위"],
+    "환자취급": ["환자진료", "진료범위"],
+    "학술회의참석": ["학술대회 참석", "학회 참석"],
+    "학술회의": ["학술대회", "학회"],
+    "논문제출": ["논문 발표", "학술논문"],
+    "타과파견": ["타과 순환", "타과 로테이션"],
+    "기타요건": ["추가요건", "기타 조건"],
+    "교과과정": ["교육과정", "수련과정", "커리큘럼"],
+    "수련": ["교육", "훈련"],
+    "목표": ["교육목표", "교육 목표"],
+    "년차": ["연차"],
+    "연차": ["년차"],
+}
+
+# Multi-Query: 구조 변환 패턴
+_REFORMULATIONS = [
+    ("알려줘", "관련 내용"),
+    ("알려주세요", "관련 내용"),
+    ("어떻게 되나요?", "관련 내용"),
+    ("무엇인가요?", "관련 내용"),
+    ("뭐야?", "관련 내용"),
+    ("뭐야", "관련 내용"),
+    ("은?", " 관련 내용"),
+    ("는?", " 관련 내용"),
+    ("이?", " 관련 내용"),
+]
+
+
+def _generate_query_variations(question: str, n: int = 2) -> list[str]:
+    """질문에서 유의어 치환/구조 변환을 통해 n개의 변형 쿼리 생성"""
+    variations = []
+
+    # 변형 1: 유의어 치환 (긴 단어 우선 매칭)
+    syn_variation = question
+    for term in sorted(_QUERY_SYNONYMS, key=len, reverse=True):
+        if term in syn_variation:
+            syn_variation = syn_variation.replace(term, _QUERY_SYNONYMS[term][0], 1)
+            break
+    if syn_variation != question:
+        variations.append(syn_variation)
+
+    # 변형 2: 구조 변환 (질문형→서술형)
+    reformulated = question
+    for pattern, replacement in _REFORMULATIONS:
+        if pattern in reformulated:
+            reformulated = reformulated.replace(pattern, replacement).strip()
+            break
+    if reformulated != question and reformulated not in variations:
+        variations.append(reformulated)
+
+    # 부족하면 두 번째 유의어로 추가 변형
+    if len(variations) < n:
+        syn2 = question
+        found_first = False
+        for term in sorted(_QUERY_SYNONYMS, key=len, reverse=True):
+            if term in syn2:
+                if not found_first:
+                    found_first = True
+                    continue
+                syn2 = syn2.replace(term, _QUERY_SYNONYMS[term][0], 1)
+                break
+        if syn2 != question and syn2 not in variations:
+            variations.append(syn2)
+
+    return variations[:n]
+
+
+def _multi_query(
+    col, question: str, top_k: int, where_filter: dict | None
+) -> list[dict]:
+    """Multi-query retrieval: 여러 쿼리 변형으로 검색 후 결과 병합"""
+    if not MULTI_QUERY_ENABLED:
+        return _query(col, question, top_k, where_filter)
+
+    variations = _generate_query_variations(question, n=MULTI_QUERY_COUNT - 1)
+    all_queries = [question] + variations
+
+    def run_query(q):
+        return _query(col, q, top_k, where_filter)
+
+    with ThreadPoolExecutor(max_workers=len(all_queries)) as executor:
+        all_results = list(executor.map(run_query, all_queries))
+
+    # document ID 기준 중복 제거 (최소 distance 유지)
+    best: dict[str, dict] = {}
+    for result_set in all_results:
+        for item in result_set:
+            doc_id = item["id"]
+            if doc_id not in best or item["distance"] < best[doc_id]["distance"]:
+                best[doc_id] = item
+
+    deduped = sorted(best.values(), key=lambda x: x["distance"])
+    return deduped[:top_k]
 
 
 def _is_attachment_filter(where_filter: dict) -> bool:
@@ -129,8 +237,8 @@ def retrieve(question: str, top_k: int = TOP_K) -> list[dict]:
     col = get_collection()
     where_filter = extract_query_filters(question)
 
-    # 1차 검색
-    items = _query(col, question, top_k, where_filter)
+    # 1차 검색: multi-query
+    items = _multi_query(col, question, top_k, where_filter)
 
     # 2단계: 1차 결과에 첨부 문서가 없고, 첨부 필터가 아닌 경우 첨부 보완 검색
     has_attachment = any(r["metadata"].get("doc_type") == "첨부" for r in items)
@@ -162,6 +270,6 @@ def retrieve(question: str, top_k: int = TOP_K) -> list[dict]:
 
 def format_context(results: list[dict]) -> str:
     parts = []
-    for i, r in enumerate(results, 1):
-        parts.append(f"--- 참고자료 {i} ---\n{r['text']}")
+    for r in results:
+        parts.append(r["text"])
     return "\n\n".join(parts)

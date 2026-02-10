@@ -1,15 +1,15 @@
 import os
 
 import chromadb
-from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
+from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
-from .config import CHROMA_COLLECTION, CHROMA_PERSIST_DIR, EMBEDDING_MODEL, OLLAMA_BASE_URL
+from .config import CHROMA_COLLECTION, CHROMA_PERSIST_DIR, EMBEDDING_MODEL
 
 
 def _get_embedding_fn():
-    return OllamaEmbeddingFunction(
-        url=OLLAMA_BASE_URL,
+    return SentenceTransformerEmbeddingFunction(
         model_name=EMBEDDING_MODEL,
+        device="cuda",
     )
 
 

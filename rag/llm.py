@@ -17,6 +17,9 @@ def generate_stream(
             "prompt": prompt,
             "system": system,
             "stream": True,
+            "options": {
+                "temperature": 0,
+            },
         },
         stream=True,
         timeout=120,

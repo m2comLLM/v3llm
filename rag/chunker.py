@@ -118,9 +118,19 @@ def chunk_curriculum_table(
     # (연차, 구분) 단위 청크
     for (year, cat_raw), group in df.groupby([col_year, col_cat], sort=False):
         cat = normalize_category(cat_raw)
-        content = "\n".join(
-            line for line in group[col_content].tolist() if line.strip()
-        )
+        lines = [line for line in group[col_content].tolist() if line.strip()]
+        content_parts = []
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            is_section_tag = stripped.startswith("<") and stripped.endswith(">")
+            # 섹션 태그 앞에 빈 줄 추가 (첫 줄 제외)
+            if is_section_tag and content_parts:
+                content_parts.append("")
+            content_parts.append(line)
+            # 섹션 태그 뒤에도 빈 줄 추가 (마지막 줄 제외)
+            if is_section_tag and i < len(lines) - 1:
+                content_parts.append("")
+        content = "\n".join(content_parts)
         if not content.strip():
             continue
 
