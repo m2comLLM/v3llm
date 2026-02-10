@@ -35,7 +35,7 @@ def extract_query_filters(question: str) -> dict | None:
         return {"$and": filters + [{"doc_type": "첨부"}]}
 
     # 연차 감지
-    m = re.search(r"(\d)\s*년\s*차", question)
+    m = re.search(r"(\d)\s*[년연]\s*차", question)
     if m:
         filters.append({"year": m.group(1)})
 
@@ -144,6 +144,18 @@ def retrieve(question: str, top_k: int = TOP_K) -> list[dict]:
         for item in att_items:
             if item["distance"] < 1.5:
                 items.append(item)
+
+    # 특정 연차 질문 시 총계/비고 제외
+    has_year = where_filter and any(
+        f.get("year") in ("1", "2", "3", "4")
+        for f in (where_filter.get("$and", []) if "$and" in (where_filter or {}) else [where_filter or {}])
+    )
+    if has_year:
+        items = [r for r in items if r["metadata"].get("year") not in ("총계", "비고")]
+
+    # 연차순 정렬 (1→2→3→4→총계→비고)
+    YEAR_ORDER = {"1": 0, "2": 1, "3": 2, "4": 3, "총계": 4, "비고": 5}
+    items.sort(key=lambda x: YEAR_ORDER.get(x["metadata"].get("year", ""), 99))
 
     return items
 

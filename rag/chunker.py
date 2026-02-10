@@ -143,10 +143,10 @@ def chunk_curriculum_table(
             }
         )
 
-    # "동일" 참조 해결: "2년차와 동일" 등의 참조를 원본 내용으로 대체
+    # "동일/공통" 참조 해결: "2년차와 동일", "1년차와 공통" 등의 참조를 원본 내용으로 대체
     chunk_map = {c["id"]: c for c in chunks}
     for chunk in chunks:
-        m = re.search(r"(\d)년차와\s*동일", chunk["text"])
+        m = re.search(r"(\d)년차와\s*(?:동일|공통)", chunk["text"])
         if m and len(chunk["text"].split("\n", 1)[-1].strip()) < 30:
             ref_year = m.group(1)
             ref_id = f"{specialty}_{ref_year}_{chunk['metadata']['category']}"

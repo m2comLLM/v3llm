@@ -253,54 +253,60 @@ def render_chat_tab():
             st.session_state.messages = []
             st.rerun()
 
-    # 채팅 기록 표시
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-            if msg.get("sources"):
-                with st.expander("참고 자료"):
-                    for s in msg["sources"]:
-                        label = s.get("specialty") or s.get("doc_type", "")
-                        if s.get("year"):
-                            label += f" {s['year']}년차" if s["year"] not in ("총계", "비고") else f" {s['year']}"
-                        if s.get("category") and s["category"] != "전체":
-                            label += f" - {s['category']}"
-                        st.markdown(f"- {label}")
+    # 채팅 메시지 컨테이너 (스크롤 영역)
+    chat_container = st.container(height=600)
 
-    # 채팅 입력
+    # 채팅 기록 표시
+    with chat_container:
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"].replace("<br>", "\n"))
+                if msg.get("sources"):
+                    with st.expander("참고 자료"):
+                        for s in msg["sources"]:
+                            label = s.get("specialty") or s.get("doc_type", "")
+                            if s.get("year"):
+                                label += f" {s['year']}년차" if s["year"] not in ("총계", "비고") else f" {s['year']}"
+                            if s.get("category") and s["category"] != "전체":
+                                label += f" - {s['category']}"
+                            st.markdown(f"- {label}")
+
+    # 채팅 입력 (컨테이너 밖 = 항상 하단)
     if prompt := st.chat_input("질문을 입력하세요"):
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+        with chat_container:
+            with st.chat_message("user"):
+                st.markdown(prompt)
 
-        with st.chat_message("assistant"):
-            # 검색
-            results = retrieve(prompt)
-            context = format_context(results)
+            with st.chat_message("assistant"):
+                # 검색
+                results = retrieve(prompt)
+                context = format_context(results)
 
-            # 스트리밍 답변
-            response_placeholder = st.empty()
-            full_response = ""
-            try:
-                for token in generate_stream(prompt, context):
-                    full_response += token
-                    response_placeholder.markdown(full_response + "▌")
-                response_placeholder.markdown(full_response)
-            except Exception as e:
-                full_response = f"LLM 응답 오류: {e}"
-                response_placeholder.error(full_response)
+                # 스트리밍 답변
+                response_placeholder = st.empty()
+                full_response = ""
+                try:
+                    for token in generate_stream(prompt, context):
+                        full_response += token
+                        display_text = full_response.replace("<br>", "\n")
+                        response_placeholder.markdown(display_text + "▌")
+                    response_placeholder.markdown(full_response.replace("<br>", "\n"))
+                except Exception as e:
+                    full_response = f"LLM 응답 오류: {e}"
+                    response_placeholder.error(full_response)
 
-            # 출처 표시
-            source_info = [r["metadata"] for r in results]
-            if source_info:
-                with st.expander("참고 자료"):
-                    for s in source_info:
-                        label = s.get("specialty") or s.get("doc_type", "")
-                        if s.get("year"):
-                            label += f" {s['year']}년차" if s["year"] not in ("총계", "비고") else f" {s['year']}"
-                        if s.get("category") and s["category"] != "전체":
-                            label += f" - {s['category']}"
-                        st.markdown(f"- {label}")
+                # 출처 표시
+                source_info = [r["metadata"] for r in results]
+                if source_info:
+                    with st.expander("참고 자료"):
+                        for s in source_info:
+                            label = s.get("specialty") or s.get("doc_type", "")
+                            if s.get("year"):
+                                label += f" {s['year']}년차" if s["year"] not in ("총계", "비고") else f" {s['year']}"
+                            if s.get("category") and s["category"] != "전체":
+                                label += f" - {s['category']}"
+                            st.markdown(f"- {label}")
 
         st.session_state.messages.append(
             {"role": "assistant", "content": full_response, "sources": source_info}
