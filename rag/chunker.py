@@ -136,7 +136,10 @@ def chunk_curriculum_table(
 
         # "동일" 참조 해결은 나중에 한꺼번에 처리
         chunk_id = f"{specialty}_{year}_{cat}"
-        header = f"[{specialty}] {year}년차 - {cat}:" if year not in ("총계", "비고") else f"[{specialty}] {year} - {cat}:"
+        if year in ("총계", "비고"):
+            header = f"[{specialty}] {year} - {cat}:" if cat else f"[{specialty}] {year}:"
+        else:
+            header = f"[{specialty}] {year}년차 - {cat}:"
         chunks.append(
             {
                 "id": chunk_id,
@@ -165,17 +168,19 @@ def chunk_curriculum_table(
                 header = chunk["text"].split("\n", 1)[0]
                 chunk["text"] = f"{header}\n{ref_text}"
 
-    # 연차별 요약 청크
+    # 연차별 요약 청크 (비고는 구분 없이 단일 청크이므로 요약 생략)
     for year, group in df.groupby(col_year, sort=False):
+        if year == "비고":
+            continue
         lines = []
         for _, row in group.iterrows():
             cat = normalize_category(str(row[col_cat]))
             content = str(row[col_content]).strip()
             if content:
-                lines.append(f"[{cat}] {content}")
+                lines.append(f"[{cat}] {content}" if cat else content)
         if not lines:
             continue
-        header = f"[{specialty}] {year}년차 전체:" if year not in ("총계", "비고") else f"[{specialty}] {year} 전체:"
+        header = f"[{specialty}] {year}년차 전체:" if year not in ("총계",) else f"[{specialty}] {year} 전체:"
         chunks.append(
             {
                 "id": f"{specialty}_{year}_전체",

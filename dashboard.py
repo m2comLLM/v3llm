@@ -23,6 +23,11 @@ def normalize_category(raw: str) -> str:
     return raw.replace(" ", "").strip()
 
 
+def preserve_newlines(text: str) -> str:
+    """마크다운에서 줄바꿈이 유지되도록 단일 \\n을 '  \\n'(trailing space)으로 변환"""
+    return text.replace("<br>", "\n").replace("\n", "  \n")
+
+
 def get_category_color(raw: str) -> str:
     return CATEGORY_COLORS.get(normalize_category(raw), "#ffffff")
 
@@ -260,7 +265,7 @@ def render_chat_tab():
     with chat_container:
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
-                st.markdown(msg["content"].replace("<br>", "\n"))
+                st.markdown(preserve_newlines(msg["content"]))
                 if msg.get("sources"):
                     with st.expander("참고 자료"):
                         for s in msg["sources"]:
@@ -289,9 +294,8 @@ def render_chat_tab():
                 try:
                     for token in generate_stream(prompt, context):
                         full_response += token
-                        display_text = full_response.replace("<br>", "\n")
-                        response_placeholder.markdown(display_text + "▌")
-                    response_placeholder.markdown(full_response.replace("<br>", "\n"))
+                        response_placeholder.markdown(preserve_newlines(full_response) + "▌")
+                    response_placeholder.markdown(preserve_newlines(full_response))
                 except Exception as e:
                     full_response = f"LLM 응답 오류: {e}"
                     response_placeholder.error(full_response)
