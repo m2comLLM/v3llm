@@ -156,16 +156,28 @@ def chunk_curriculum_table(
             }
         )
 
-    # "동일/공통" 참조 해결: "2년차와 동일", "1년차와 공통" 등의 참조를 원본 내용으로 대체
+    # 참조 해결: "2년차와 동일", "총계 참조" 등의 참조를 원본 내용으로 대체
     chunk_map = {c["id"]: c for c in chunks}
     for chunk in chunks:
-        m = re.search(r"(\d)년차와\s*(?:동일|공통)", chunk["text"])
-        if m and len(chunk["text"].split("\n", 1)[-1].strip()) < 30:
-            ref_year = m.group(1)
-            ref_id = f"{specialty}_{ref_year}_{chunk['metadata']['category']}"
+        body = chunk["text"].split("\n", 1)[-1].strip()
+        if len(body) > 30:
+            continue
+        header = chunk["text"].split("\n", 1)[0]
+
+        # "N년차와 동일/공통" 참조
+        m = re.search(r"(\d)년차와\s*(?:동일|공통)", body)
+        if m:
+            ref_id = f"{specialty}_{m.group(1)}_{chunk['metadata']['category']}"
             if ref_id in chunk_map:
                 ref_text = chunk_map[ref_id]["text"].split("\n", 1)[-1]
-                header = chunk["text"].split("\n", 1)[0]
+                chunk["text"] = f"{header}\n{ref_text}"
+            continue
+
+        # "총계 참조" 참조
+        if re.search(r"총계\s*참조", body):
+            ref_id = f"{specialty}_총계_{chunk['metadata']['category']}"
+            if ref_id in chunk_map:
+                ref_text = chunk_map[ref_id]["text"].split("\n", 1)[-1]
                 chunk["text"] = f"{header}\n{ref_text}"
 
     # 연차별 요약 청크 (비고는 구분 없이 단일 청크이므로 요약 생략)

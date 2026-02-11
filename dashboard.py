@@ -245,7 +245,19 @@ def render_chat_tab():
 
             chunks = generate_all_chunks()
             rebuild_index(chunks)
-        st.success(f"인덱스 구축 완료!")
+        st.success("인덱스 구축 완료!")
+
+    # BM25 인덱스 확인 (기존 ChromaDB만 있고 BM25 없는 경우)
+    from rag.bm25_index import get_bm25_index
+
+    bm25 = get_bm25_index()
+    if not bm25.is_built():
+        with st.spinner("BM25 인덱스를 구축하고 있습니다..."):
+            from rag.bm25_index import rebuild_bm25_index
+            from rag.chunker import generate_all_chunks
+
+            rebuild_bm25_index(generate_all_chunks())
+        st.success("BM25 인덱스 구축 완료!")
 
     # 채팅 기록 초기화
     if "messages" not in st.session_state:

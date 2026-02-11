@@ -1,12 +1,18 @@
 import re
 from concurrent.futures import ThreadPoolExecutor
 
+from .bm25_index import get_bm25_index
 from .config import (
+    BM25_TOP_K_MULTIPLIER,
+    BM25_WEIGHT,
+    HYBRID_SEARCH_ENABLED,
     MULTI_QUERY_COUNT,
     MULTI_QUERY_ENABLED,
+    RRF_K,
     SPECIALTIES,
     SPECIALTY_ALIASES,
     TOP_K,
+    VECTOR_WEIGHT,
 )
 from .indexer import get_collection
 
@@ -233,12 +239,55 @@ def _extract_specialty_filter(where_filter: dict) -> dict | None:
     return None
 
 
+def _reciprocal_rank_fusion(
+    vector_results: list[dict],
+    bm25_results: list[dict],
+    top_k: int,
+) -> list[dict]:
+    """Reciprocal Rank Fusion: 벡터 검색과 BM25 검색 결과를 순위 기반으로 융합"""
+    rrf_scores: dict[str, float] = {}
+    doc_map: dict[str, dict] = {}
+
+    for rank, item in enumerate(vector_results, start=1):
+        doc_id = item["id"]
+        rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + VECTOR_WEIGHT / (RRF_K + rank)
+        if doc_id not in doc_map:
+            doc_map[doc_id] = item
+
+    for rank, item in enumerate(bm25_results, start=1):
+        doc_id = item["id"]
+        rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + BM25_WEIGHT / (RRF_K + rank)
+        if doc_id not in doc_map:
+            doc_map[doc_id] = item
+
+    sorted_ids = sorted(rrf_scores, key=rrf_scores.get, reverse=True)
+
+    fused = []
+    for doc_id in sorted_ids[:top_k]:
+        item = doc_map[doc_id].copy()
+        item.pop("bm25_score", None)
+        item.pop("distance", None)
+        fused.append(item)
+
+    return fused
+
+
 def retrieve(question: str, top_k: int = TOP_K) -> list[dict]:
     col = get_collection()
     where_filter = extract_query_filters(question)
 
-    # 1차 검색: multi-query
-    items = _multi_query(col, question, top_k, where_filter)
+    fetch_k = top_k * BM25_TOP_K_MULTIPLIER
+
+    # 1a: Multi-query 벡터 검색
+    vector_items = _multi_query(col, question, fetch_k, where_filter)
+
+    # 1b: BM25 키워드 검색 + RRF 융합
+    if HYBRID_SEARCH_ENABLED:
+        bm25_idx = get_bm25_index()
+        bm25_items = bm25_idx.query(question, fetch_k, where_filter)
+        items = _reciprocal_rank_fusion(vector_items, bm25_items, top_k)
+    else:
+        items = vector_items[:top_k]
 
     # 2단계: 1차 결과에 첨부 문서가 없고, 첨부 필터가 아닌 경우 첨부 보완 검색
     has_attachment = any(r["metadata"].get("doc_type") == "첨부" for r in items)

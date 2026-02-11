@@ -3,6 +3,7 @@ import os
 import chromadb
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 
+from .bm25_index import rebuild_bm25_index
 from .config import CHROMA_COLLECTION, CHROMA_PERSIST_DIR, EMBEDDING_MODEL
 
 
@@ -46,6 +47,7 @@ def index_chunks(chunks: list[dict]) -> int:
             documents=[c["text"] for c in batch],
             metadatas=[c["metadata"] for c in batch],
         )
+    rebuild_bm25_index(chunks)
     return col.count()
 
 
@@ -55,4 +57,5 @@ def rebuild_index(chunks: list[dict]) -> int:
         client.delete_collection(CHROMA_COLLECTION)
     except Exception:
         pass
-    return index_chunks(chunks)
+    count = index_chunks(chunks)
+    return count
