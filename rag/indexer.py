@@ -17,7 +17,7 @@ def _get_embedding_fn():
     if _embedding_fn is None:
         _embedding_fn = SentenceTransformerEmbeddingFunction(
             model_name=EMBEDDING_MODEL,
-            device="cuda",
+            device="cpu",
         )
     return _embedding_fn
 

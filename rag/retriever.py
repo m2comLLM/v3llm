@@ -78,7 +78,7 @@ def extract_query_filters(question: str) -> dict | None:
     _REGULATION_KEYWORDS = ("수련규정", "전문의수련규정", "전문의의 수련", "자격 인정")
     is_regulation = any(kw in question for kw in _REGULATION_KEYWORDS)
     # "제N조" 패턴이 있고 전공 필터가 없으면 규정 문서로 판단
-    if not is_regulation and re.search(r"제\d+조", question) and not any("specialty" in f for f in filters):
+    if not is_regulation and re.search(r"제\s*\d+\s*조", question) and not any("specialty" in f for f in filters):
         is_regulation = True
     # 전공 없이 "규정"만 언급된 경우
     if not is_regulation and "규정" in question and not any("specialty" in f for f in filters):
@@ -89,9 +89,9 @@ def extract_query_filters(question: str) -> dict | None:
     if is_regulation:
         filters.append({"doc_type": "전문의수련규정"})
         # 규정 내 본문/부칙 카테고리 구분
-        if "부칙" in question and not re.search(r"제\d+조", question):
+        if "부칙" in question:
             filters.append({"category": "부칙"})
-        elif re.search(r"제\d+조", question) and "부칙" not in question:
+        elif re.search(r"제\s*\d+\s*조", question):
             filters.append({"category": "본문"})
 
     # 일반 문서 감지 (규정 필터가 있으면 건너뜀)
@@ -302,6 +302,42 @@ def retrieve(question: str, top_k: int = TOP_K) -> list[dict]:
     col = get_collection()
     where_filter = extract_query_filters(question)
 
+    # 특정 조문/부칙 직접 조회
+    is_regulation = where_filter and any(
+        f.get("doc_type") == "전문의수련규정"
+        for f in (where_filter.get("$and", []) if "$and" in (where_filter or {}) else [where_filter or {}])
+    )
+    if is_regulation:
+        m_decree = re.search(r"제\s*(\d+)\s*호", question)
+        m_article = re.search(r"제\s*(\d+)\s*조", question)
+
+        if "부칙" in question and m_decree:
+            # 부칙 호수 직접 조회 (예: "부칙 제21108호" → ID로 바로 가져오기)
+            target_id = f"전문의수련규정_부칙_제{m_decree.group(1)}호"
+            try:
+                result = col.get(ids=[target_id], include=["documents", "metadatas"])
+                if result and result["documents"]:
+                    return [{
+                        "id": target_id,
+                        "text": result["documents"][0],
+                        "metadata": result["metadatas"][0],
+                    }]
+            except Exception:
+                pass
+        elif m_article and "부칙" not in question:
+            # 본문 조문 직접 조회 (예: "제17조" → ID로 바로 가져오기)
+            target_id = f"전문의수련규정_제{m_article.group(1)}조"
+            try:
+                result = col.get(ids=[target_id], include=["documents", "metadatas"])
+                if result and result["documents"]:
+                    return [{
+                        "id": target_id,
+                        "text": result["documents"][0],
+                        "metadata": result["metadatas"][0],
+                    }]
+            except Exception:
+                pass
+
     fetch_k = top_k * BM25_TOP_K_MULTIPLIER
 
     # 1a: Multi-query 벡터 검색
@@ -339,11 +375,21 @@ def retrieve(question: str, top_k: int = TOP_K) -> list[dict]:
     if has_year:
         items = [r for r in items if r["metadata"].get("year") not in ("총계", "비고")]
 
-    # 연차순 정렬 (규정 문서는 연차 정렬 불필요)
+    # 결과 정렬
     has_regulation_results = any(
         r["metadata"].get("doc_type") == "전문의수련규정" for r in items
     )
-    if not has_regulation_results:
+    if has_regulation_results:
+        # 규정: 본문(제N조 번호순) → 부칙(호수 번호순)
+        def _regulation_sort_key(item):
+            doc_id = item.get("id", "")
+            cat = item["metadata"].get("category", "")
+            m = re.search(r"(\d+)", doc_id.split("_", 1)[-1])
+            num = int(m.group(1)) if m else 999
+            return (0 if cat == "본문" else 1, num)
+        items.sort(key=_regulation_sort_key)
+    else:
+        # 교과과정: 연차순 정렬
         YEAR_ORDER = {"1": 0, "2": 1, "3": 2, "4": 3, "총계": 4, "비고": 5}
         items.sort(key=lambda x: YEAR_ORDER.get(x["metadata"].get("year", ""), 99))
 
