@@ -32,6 +32,7 @@ def get_category_color(raw: str) -> str:
     return CATEGORY_COLORS.get(normalize_category(raw), "#ffffff")
 
 
+@st.cache_data
 def parse_md_table(text: str) -> pd.DataFrame | None:
     """마크다운 텍스트에서 테이블을 파싱하여 DataFrame으로 반환"""
     lines = [l for l in text.strip().splitlines() if l.startswith("|")]
@@ -46,6 +47,7 @@ def parse_md_table(text: str) -> pd.DataFrame | None:
     return pd.DataFrame(rows, columns=header)
 
 
+@st.cache_data
 def load_chapters():
     """output/ 디렉토리에서 장 목록 로딩"""
     chapters = {}
@@ -56,6 +58,7 @@ def load_chapters():
     return chapters
 
 
+@st.cache_data
 def load_specialties():
     """제3장 하위 전공 목록 로딩"""
     ch3_dir = os.path.join(OUTPUT_DIR, "제3장_레지던트_연차별_수련_교과과정")
@@ -69,11 +72,13 @@ def load_specialties():
     return specs
 
 
+@st.cache_data
 def read_md_file(path: str) -> str:
     with open(path, encoding="utf-8") as f:
         return f.read()
 
 
+@st.cache_data
 def df_to_colored_html(df: pd.DataFrame, year_filter: str = "전체") -> str:
     """DataFrame을 구분별 색상이 적용된 HTML 테이블로 변환"""
     # 연차 forward fill

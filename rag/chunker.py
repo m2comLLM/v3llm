@@ -173,8 +173,8 @@ def chunk_curriculum_table(
                 chunk["text"] = f"{header}\n{ref_text}"
             continue
 
-        # "총계 참조" 참조
-        if re.search(r"총계\s*참조", body):
+        # "총계 참조" / "총계 항목 참조" 등
+        if re.search(r"총계.*참조", body):
             ref_id = f"{specialty}_총계_{chunk['metadata']['category']}"
             if ref_id in chunk_map:
                 ref_text = chunk_map[ref_id]["text"].split("\n", 1)[-1]
