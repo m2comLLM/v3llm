@@ -74,8 +74,24 @@ def extract_query_filters(question: str) -> dict | None:
             filters.append({"category": cat})
             break
 
-    # 일반 문서 감지
-    if "부칙" in question:
+    # 전문의수련규정 감지 (일반 문서 감지보다 우선)
+    _REGULATION_KEYWORDS = ("수련규정", "전문의수련규정", "전문의의 수련", "자격 인정")
+    is_regulation = any(kw in question for kw in _REGULATION_KEYWORDS)
+    # "제N조" 패턴이 있고 전공 필터가 없으면 규정 문서로 판단
+    if not is_regulation and re.search(r"제\d+조", question) and not any("specialty" in f for f in filters):
+        is_regulation = True
+    # 전공 없이 "규정"만 언급된 경우
+    if not is_regulation and "규정" in question and not any("specialty" in f for f in filters):
+        is_regulation = True
+    # "부칙 제N호" 패턴 (규정 부칙)
+    if not is_regulation and re.search(r"부칙\s*제\d+호", question):
+        is_regulation = True
+    if is_regulation:
+        filters.append({"doc_type": "전문의수련규정"})
+
+    # 일반 문서 감지 (규정 필터가 있으면 건너뜀)
+    has_regulation = any(f.get("doc_type") == "전문의수련규정" for f in filters)
+    if not has_regulation and "부칙" in question:
         filters.append({"doc_type": "부칙"})
     elif "총칙" in question:
         filters.append({"doc_type": "총칙"})
@@ -136,6 +152,11 @@ _QUERY_SYNONYMS = {
     "목표": ["교육목표", "교육 목표"],
     "년차": ["연차"],
     "연차": ["년차"],
+    "수련규정": ["전문의수련규정", "수련 규정"],
+    "전문의수련규정": ["수련규정", "전문의 수련규정"],
+    "수련병원": ["수련기관", "지정병원"],
+    "수련기관": ["수련병원"],
+    "전공의": ["레지던트", "수련의"],
 }
 
 # Multi-Query: 구조 변환 패턴
@@ -310,9 +331,13 @@ def retrieve(question: str, top_k: int = TOP_K) -> list[dict]:
     if has_year:
         items = [r for r in items if r["metadata"].get("year") not in ("총계", "비고")]
 
-    # 연차순 정렬 (1→2→3→4→총계→비고)
-    YEAR_ORDER = {"1": 0, "2": 1, "3": 2, "4": 3, "총계": 4, "비고": 5}
-    items.sort(key=lambda x: YEAR_ORDER.get(x["metadata"].get("year", ""), 99))
+    # 연차순 정렬 (규정 문서는 연차 정렬 불필요)
+    has_regulation_results = any(
+        r["metadata"].get("doc_type") == "전문의수련규정" for r in items
+    )
+    if not has_regulation_results:
+        YEAR_ORDER = {"1": 0, "2": 1, "3": 2, "4": 3, "총계": 4, "비고": 5}
+        items.sort(key=lambda x: YEAR_ORDER.get(x["metadata"].get("year", ""), 99))
 
     return items
 

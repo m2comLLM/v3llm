@@ -139,6 +139,54 @@ def render_chapter_content(chapter_path: str):
             st.markdown(content)
 
 
+def render_regulation(reg_path: str):
+    """전문의수련규정 본문/부칙 렌더링 (조문 네비게이션 포함)"""
+    st.header("전문의수련규정")
+
+    # 본문/부칙 파일 수집
+    all_items = []
+    bonmun_dir = os.path.join(reg_path, "본문")
+    buchik_dir = os.path.join(reg_path, "부칙")
+
+    def _article_sort_key(fname):
+        """파일명에서 숫자를 추출하여 숫자순 정렬 (제1조→제2조→...→제21조)"""
+        m = re.search(r"(\d+)", fname)
+        return int(m.group(1)) if m else 999
+
+    if os.path.isdir(bonmun_dir):
+        for fname in sorted(os.listdir(bonmun_dir), key=_article_sort_key):
+            if fname.endswith(".md"):
+                all_items.append(("본문", fname, os.path.join(bonmun_dir, fname)))
+
+    if os.path.isdir(buchik_dir):
+        for fname in sorted(os.listdir(buchik_dir), key=_article_sort_key):
+            if fname.endswith(".md"):
+                all_items.append(("부칙", fname, os.path.join(buchik_dir, fname)))
+
+    if not all_items:
+        st.warning("전문의수련규정 문서가 없습니다.")
+        return
+
+    # 사이드바 조문 네비게이션
+    labels = []
+    for section, fname, _ in all_items:
+        name = fname.replace(".md", "").replace("_", " ")
+        prefix = "[부칙] " if section == "부칙" else ""
+        labels.append(f"{prefix}{name}")
+
+    st.sidebar.markdown("---")
+    selected_idx = st.sidebar.selectbox(
+        "조문 선택",
+        range(len(all_items)),
+        format_func=lambda i: labels[i],
+    )
+
+    # 선택된 조문 렌더링
+    _, _, fpath = all_items[selected_idx]
+    content = read_md_file(fpath)
+    st.markdown(content)
+
+
 def render_specialty(spec_path: str, spec_name: str):
     """전공 상세 페이지 렌더링"""
     display_name = re.sub(r"^\d+\.", "", spec_name)
@@ -202,6 +250,7 @@ def render_browse_tab():
 
     chapter_names = list(chapters.keys())
     chapter_labels = {
+        "전문의수련규정": "전문의수련규정",
         "부칙": "부칙",
         "제1장_총칙": "제1장 총칙",
         "제2장_인턴수련_교과과정": "제2장 인턴수련 교과과정",
@@ -227,6 +276,8 @@ def render_browse_tab():
         )
         selected_spec = spec_names[selected_spec_idx]
         render_specialty(specialties[selected_spec], selected_spec)
+    elif selected_chapter == "전문의수련규정":
+        render_regulation(chapters[selected_chapter])
     else:
         title = chapter_labels.get(selected_chapter, selected_chapter)
         st.header(f"{title}")
@@ -240,7 +291,7 @@ def render_chat_tab():
     from rag.retriever import format_context, retrieve
 
     st.header("AI 교과과정 질의응답")
-    st.caption("전공의 수련 교과과정에 대해 질문해보세요. (예: 내과 2년차 교과내용은?)")
+    st.caption("전공의 수련 교과과정 및 전문의수련규정에 대해 질문해보세요. (예: 내과 2년차 교과내용은? / 전문의수련규정 제4조는?)")
 
     # 인덱스 확인
     if not is_index_built():
@@ -335,9 +386,9 @@ def render_chat_tab():
 
 
 def main():
-    st.set_page_config(page_title="전공의 수련교과과정", page_icon="🩺", layout="wide")
+    st.set_page_config(page_title="전공의 수련교과과정 및 수련규정", page_icon="🩺", layout="wide")
 
-    st.sidebar.title("전공의 수련교과과정")
+    st.sidebar.title("전공의 수련교과과정 및 수련규정")
     st.sidebar.markdown("---")
 
     tab_browse, tab_chat = st.tabs(["교과과정 열람", "AI 질의응답"])
