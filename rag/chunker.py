@@ -90,7 +90,7 @@ def chunk_law_directory(law_dir: str, doc_type: str) -> list[dict]:
                         "specialty": "",
                         "specialty_id": 0,
                         "year": "",
-                        "category": "",
+                        "category": sub,
                         "chunk_level": "article",
                         "source_file": os.path.relpath(fpath, OUTPUT_DIR),
                     },

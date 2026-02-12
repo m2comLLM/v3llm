@@ -88,6 +88,11 @@ def extract_query_filters(question: str) -> dict | None:
         is_regulation = True
     if is_regulation:
         filters.append({"doc_type": "전문의수련규정"})
+        # 규정 내 본문/부칙 카테고리 구분
+        if "부칙" in question and not re.search(r"제\d+조", question):
+            filters.append({"category": "부칙"})
+        elif re.search(r"제\d+조", question) and "부칙" not in question:
+            filters.append({"category": "본문"})
 
     # 일반 문서 감지 (규정 필터가 있으면 건너뜀)
     has_regulation = any(f.get("doc_type") == "전문의수련규정" for f in filters)
@@ -310,9 +315,12 @@ def retrieve(question: str, top_k: int = TOP_K) -> list[dict]:
     else:
         items = vector_items[:top_k]
 
-    # 2단계: 1차 결과에 첨부 문서가 없고, 첨부 필터가 아닌 경우 첨부 보완 검색
+    # 2단계: 1차 결과에 첨부 문서가 없고, 첨부/규정 필터가 아닌 경우 첨부 보완 검색
     has_attachment = any(r["metadata"].get("doc_type") == "첨부" for r in items)
-    if not has_attachment and where_filter and not _is_attachment_filter(where_filter):
+    has_regulation = any(
+        r["metadata"].get("doc_type") == "전문의수련규정" for r in items
+    )
+    if not has_attachment and not has_regulation and where_filter and not _is_attachment_filter(where_filter):
         spec_filter = _extract_specialty_filter(where_filter)
         if spec_filter:
             att_filter = {"$and": [spec_filter, {"doc_type": "첨부"}]}
