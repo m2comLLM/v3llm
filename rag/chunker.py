@@ -52,6 +52,53 @@ def _extract_specialty_info(folder_name: str) -> tuple[str, int]:
     return folder_name, 0
 
 
+def chunk_law_directory(law_dir: str, doc_type: str) -> list[dict]:
+    """본문/부칙 폴더 내 개별 .md 파일을 각각 하나의 청크로 생성"""
+    chunks = []
+    for sub in ("본문", "부칙"):
+        sub_dir = os.path.join(law_dir, sub)
+        if not os.path.isdir(sub_dir):
+            continue
+        for fname in sorted(os.listdir(sub_dir)):
+            if not fname.endswith(".md"):
+                continue
+            fpath = os.path.join(sub_dir, fname)
+            text = _read_md(fpath)
+            # H1 헤더에서 title 추출, 본문은 헤더 제거
+            title = ""
+            body = text
+            m_header = re.match(r"^#\s+(.+)\n+", text)
+            if m_header:
+                title = m_header.group(1).strip()
+                body = text[m_header.end():].strip()
+            if not body:
+                continue
+            # chunk id 결정
+            m_article = re.match(r"(제\d+조)", title)
+            if m_article:
+                chunk_id = f"{doc_type}_{m_article.group(1)}"
+            else:
+                m_decree = re.search(r"제(\d+)호", title or fname)
+                suffix = f"_제{m_decree.group(1)}호" if m_decree else ""
+                chunk_id = f"{doc_type}_부칙{suffix}"
+            chunks.append(
+                {
+                    "id": chunk_id,
+                    "text": f"[{doc_type}] {title}:\n{body}",
+                    "metadata": {
+                        "doc_type": doc_type,
+                        "specialty": "",
+                        "specialty_id": 0,
+                        "year": "",
+                        "category": "",
+                        "chunk_level": "article",
+                        "source_file": os.path.relpath(fpath, OUTPUT_DIR),
+                    },
+                }
+            )
+    return chunks
+
+
 def chunk_general_document(file_path: str, doc_type: str) -> list[dict]:
     text = _read_md(file_path)
     body = re.sub(r"^#.*\n+", "", text).strip()
@@ -226,6 +273,11 @@ def generate_all_chunks() -> list[dict]:
     for doc_type, path in general_docs.items():
         if os.path.exists(path):
             chunks.extend(chunk_general_document(path, doc_type))
+
+    # 전문의수련규정 (본문/부칙 폴더 내 개별 파일 청킹)
+    law_dir = os.path.join(OUTPUT_DIR, "전문의수련규정")
+    if os.path.isdir(law_dir):
+        chunks.extend(chunk_law_directory(law_dir, "전문의수련규정"))
 
     # 제3장 전공별
     ch3_dir = os.path.join(OUTPUT_DIR, "제3장_레지던트_연차별_수련_교과과정")
